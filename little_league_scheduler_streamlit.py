@@ -19,16 +19,6 @@ st.set_page_config(
 
 DIVISION_SHEETS = ["T-ball", "5-6", "7-8", "9-10", "11-12"]
 
-ALL_FIELDS = ["Field 1", "Field 2", "Field 3", "Field 4", "Field 5"]
-
-DEFAULT_FIELDS_BY_DIVISION = {
-    "T-ball": ["Field 5"],
-    "5-6": ["Field 4", "Field 5"],
-    "7-8": ["Field 3"],
-    "9-10": ["Field 2", "Field 1"],
-    "11-12": ["Field 1"],
-}
-
 WEEKDAY_NAME_TO_INT = {
     "Monday": 0,
     "Tuesday": 1,
@@ -45,20 +35,14 @@ TEAM_GRID_COLUMNS = ["Division", "Team", "TeamColor", "CoachName"]
 # No Friday games
 WEEKDAY_OPTIONS = ["Monday", "Tuesday", "Wednesday", "Thursday"]
 
-# Fixed slot rules
-WEEKDAY_SLOTS = ["17:00", "18:30"]  # 1.5 hours
-SATURDAY_BASE_SLOTS = ["09:30", "11:30", "13:30"]  # 2 hours
-SATURDAY_OVERFLOW_SLOT = "17:30"  # use only if needed
-
-WEEKDAY_GAME_LENGTH_MINUTES = 90
-SATURDAY_GAME_LENGTH_MINUTES = 120
-
 DIVISION_NIGHT_GROUP_OPTIONS = ["None", "M/W", "T/Th"]
 DIVISION_NIGHT_GROUP_MAP = {
     "None": {0, 1, 2, 3},
     "M/W": {0, 2},
     "T/Th": {1, 3},
 }
+
+WEEKDAY_FILL_MODE_OPTIONS = ["Even Spread", "Prioritize Specific Days"]
 
 # Brand palette
 VEGAS_GOLD = "#C5B358"
@@ -71,6 +55,71 @@ PAPER = "#FAF8F2"
 WHITE = "#FFFFFF"
 MUTED = "#6B7280"
 
+# -----------------------------------------------------
+# Division scheduling profiles
+# bucket:
+#   0 = priority Saturday slots
+#   1 = weekday slots
+#   2 = later Saturday slots
+# -----------------------------------------------------
+DIVISION_SLOT_RULES = {
+    "11-12": {
+        "weekday": [
+            {"field": "Field 1", "start": "18:00", "duration": 120, "bucket": 1},
+        ],
+        "saturday": [
+            {"field": "Field 1", "start": "09:30", "duration": 150, "bucket": 0},
+            {"field": "Field 1", "start": "12:00", "duration": 150, "bucket": 0},
+            {"field": "Field 1", "start": "14:30", "duration": 150, "bucket": 2},
+        ],
+    },
+    "9-10": {
+        "weekday": [
+            {"field": "Field 2", "start": "18:00", "duration": 120, "bucket": 1},
+        ],
+        "saturday": [
+            {"field": "Field 2", "start": "09:30", "duration": 150, "bucket": 0},
+            {"field": "Field 2", "start": "12:00", "duration": 150, "bucket": 0},
+            {"field": "Field 2", "start": "14:30", "duration": 150, "bucket": 2},
+        ],
+    },
+    "7-8": {
+        "weekday": [
+            {"field": "Field 3", "start": "18:00", "duration": 90, "bucket": 1},
+        ],
+        "saturday": [
+            {"field": "Field 3", "start": "09:30", "duration": 90, "bucket": 0},
+            {"field": "Field 3", "start": "11:00", "duration": 90, "bucket": 0},
+            {"field": "Field 3", "start": "12:30", "duration": 90, "bucket": 2},
+        ],
+    },
+    "5-6": {
+        "weekday": [
+            {"field": "Field 3", "start": "18:00", "duration": 90, "bucket": 1},
+            {"field": "Field 5", "start": "17:00", "duration": 90, "bucket": 1},
+            {"field": "Field 5", "start": "18:30", "duration": 90, "bucket": 1},
+        ],
+        "saturday": [
+            {"field": "Field 3", "start": "14:00", "duration": 90, "bucket": 0},
+            {"field": "Field 3", "start": "15:30", "duration": 60, "bucket": 0},
+            {"field": "Field 3", "start": "16:30", "duration": 60, "bucket": 2},
+        ],
+    },
+    "T-ball": {
+        "weekday": [
+            {"field": "Field 5", "start": "17:00", "duration": 90, "bucket": 1},
+            {"field": "Field 5", "start": "18:30", "duration": 90, "bucket": 1},
+        ],
+        "saturday": [
+            {"field": "Field 5", "start": "09:30", "duration": 75, "bucket": 0},
+            {"field": "Field 5", "start": "10:45", "duration": 75, "bucket": 0},
+            {"field": "Field 5", "start": "12:00", "duration": 75, "bucket": 2},
+            {"field": "Field 5", "start": "13:15", "duration": 75, "bucket": 2},
+            {"field": "Field 5", "start": "14:30", "duration": 75, "bucket": 2},
+        ],
+    },
+}
+
 
 @dataclass
 class TeamRecord:
@@ -78,7 +127,7 @@ class TeamRecord:
     team: str
     team_color: str
     coach_name: str
-    preferred_weekdays: List[int]  # Saturday added automatically
+    preferred_weekdays: List[int]
 
 
 @dataclass
@@ -310,6 +359,35 @@ def inject_app_css():
             border-radius: 12px !important;
         }}
 
+        div[data-baseweb="notification"],
+        div[data-testid="stAlert"] {{
+            color: #111111 !important;
+        }}
+
+        div[data-testid="stAlert"] * {{
+            color: #111111 !important;
+        }}
+
+        div[data-testid="stAlert"][kind="warning"] {{
+            background: #FFF6CC !important;
+            border-left: 6px solid #C5B358 !important;
+        }}
+
+        div[data-testid="stAlert"][kind="success"] {{
+            background: #E8F6EC !important;
+            border-left: 6px solid #2E8B57 !important;
+        }}
+
+        div[data-testid="stAlert"][kind="error"] {{
+            background: #FDECEA !important;
+            border-left: 6px solid #C0392B !important;
+        }}
+
+        div[data-testid="stAlert"][kind="info"] {{
+            background: #E7F1FF !important;
+            border-left: 6px solid #3B82F6 !important;
+        }}
+
         .stDataFrame, .stTable {{
             border-radius: 16px;
             overflow: hidden;
@@ -326,13 +404,13 @@ def render_hero():
         <div class="hero-card">
             <div class="hero-title">⚾ Little League Schedule Builder</div>
             <p class="hero-sub">
-                Build division schedules, control fields and weekday rules, balance home/away,
+                Build division schedules, use age-group slot profiles, balance home/away,
                 review conflicts, and manage overflow games with a polished calendar view.
             </p>
             <div style="margin-top:14px;">
                 <span class="gold-chip">Vegas Gold Theme</span>
-                <span class="gold-chip">Saturday-First Scheduling</span>
-                <span class="gold-chip">Night Group Rules</span>
+                <span class="gold-chip">Weekend/Week Hybrid Fill</span>
+                <span class="gold-chip">Weekday Weighting</span>
                 <span class="gold-chip">Manual Placement</span>
             </div>
         </div>
@@ -398,8 +476,10 @@ if "season_end" not in st.session_state:
     st.session_state.season_end = None
 if "division_night_groups" not in st.session_state:
     st.session_state.division_night_groups = {division: "None" for division in DIVISION_SHEETS}
-if "division_fields" not in st.session_state:
-    st.session_state.division_fields = DEFAULT_FIELDS_BY_DIVISION.copy()
+if "weekday_fill_mode" not in st.session_state:
+    st.session_state.weekday_fill_mode = "Even Spread"
+if "weekday_priority_order" not in st.session_state:
+    st.session_state.weekday_priority_order = ["Monday", "Tuesday", "Wednesday", "Thursday"]
 
 
 # -------------------------
@@ -432,6 +512,17 @@ def deserialize_list(value) -> List[str]:
 def get_division_weekday_set(division: str, division_night_groups: Dict[str, str]) -> set:
     group = division_night_groups.get(division, "None")
     return set(DIVISION_NIGHT_GROUP_MAP.get(group, DIVISION_NIGHT_GROUP_MAP["None"]))
+
+
+def validate_priority_order(priority_order: List[str]) -> Tuple[bool, str]:
+    if len(priority_order) != len(WEEKDAY_OPTIONS):
+        return False, "Choose a full weekday priority order."
+    if len(set(priority_order)) != len(priority_order):
+        return False, "Each weekday priority slot must be unique."
+    for day in priority_order:
+        if day not in WEEKDAY_OPTIONS:
+            return False, "Invalid weekday found in priority order."
+    return True, "OK"
 
 
 @st.cache_data(show_spinner=False)
@@ -509,10 +600,9 @@ def build_master_team_df(division_frames: Dict[str, pd.DataFrame]) -> pd.DataFra
 def normalize_team_config_df(master_df: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for _, row in master_df.iterrows():
-        division = row["Division"]
         rows.append(
             {
-                "Division": division,
+                "Division": row["Division"],
                 "Team": row["Team"],
                 "TeamColor": row["TeamColor"],
                 "CoachName": row["CoachName"],
@@ -549,20 +639,12 @@ def daterange(start_date: date, end_date: date):
         current += timedelta(days=1)
 
 
-def build_slot(start_label: str, duration_minutes: int) -> Tuple[str, time, time, int]:
-    start_dt = datetime.strptime(start_label, "%H:%M")
-    end_dt = start_dt + timedelta(minutes=duration_minutes)
-    return start_label, start_dt.time(), end_dt.time(), duration_minutes
-
-
-def get_day_slot_defs(current_date: date, use_overflow_saturday_slot: bool) -> List[Tuple[str, time, time, int]]:
+def get_division_slot_defs(division: str, current_date: date) -> List[dict]:
+    rules = DIVISION_SLOT_RULES.get(division, {})
     if current_date.weekday() in [0, 1, 2, 3]:
-        return [build_slot(slot, WEEKDAY_GAME_LENGTH_MINUTES) for slot in WEEKDAY_SLOTS]
+        return rules.get("weekday", [])
     if current_date.weekday() == 5:
-        slots = [build_slot(slot, SATURDAY_GAME_LENGTH_MINUTES) for slot in SATURDAY_BASE_SLOTS]
-        if use_overflow_saturday_slot:
-            slots.append(build_slot(SATURDAY_OVERFLOW_SLOT, SATURDAY_GAME_LENGTH_MINUTES))
-        return slots
+        return rules.get("saturday", [])
     return []
 
 
@@ -594,10 +676,6 @@ def allowed_weekdays_for_matchup(
 
     shared.add(WEEKDAY_NAME_TO_INT["Saturday"])
     return shared
-
-
-def eligible_fields_for_matchup(division: str, division_fields: Dict[str, List[str]]) -> List[str]:
-    return division_fields.get(division, [])
 
 
 def generate_round_robin_pairings(team_names: List[str], games_per_team: int) -> List[Tuple[str, str]]:
@@ -674,7 +752,130 @@ def parse_team_records_from_config(config_df: pd.DataFrame) -> List[TeamRecord]:
     return team_records
 
 
-def monthly_calendar_html(schedule_df: pd.DataFrame, year: int, month: int, division_filter: str = "All") -> str:
+def division_games_on_date(scheduled_games: List[GameRecord], division: str, current_date: date) -> int:
+    return sum(1 for g in scheduled_games if g.division == division and g.game_date == current_date)
+
+
+def division_games_in_week(scheduled_games: List[GameRecord], division: str, current_date: date) -> int:
+    iso_year, iso_week, _ = current_date.isocalendar()
+    return sum(
+        1
+        for g in scheduled_games
+        if g.division == division and g.game_date.isocalendar()[:2] == (iso_year, iso_week)
+    )
+
+
+def division_games_on_weekday(scheduled_games: List[GameRecord], division: str, weekday_int: int) -> int:
+    return sum(
+        1
+        for g in scheduled_games
+        if g.division == division and g.game_date.weekday() == weekday_int
+    )
+
+
+def choose_home_away(
+    division: str,
+    team_a: str,
+    team_b: str,
+    home_counts: Dict[Tuple[str, str], int],
+    away_counts: Dict[Tuple[str, str], int],
+) -> Tuple[str, str]:
+    a_home = home_counts.get((division, team_a), 0)
+    b_home = home_counts.get((division, team_b), 0)
+    a_away = away_counts.get((division, team_a), 0)
+    b_away = away_counts.get((division, team_b), 0)
+
+    if a_home < b_home:
+        return team_a, team_b
+    if b_home < a_home:
+        return team_b, team_a
+
+    if a_away > b_away:
+        return team_a, team_b
+    if b_away > a_away:
+        return team_b, team_a
+
+    return (team_a, team_b) if team_a <= team_b else (team_b, team_a)
+
+
+def build_candidate_slots_for_matchup(
+    division: str,
+    start_date: date,
+    end_date: date,
+    blocked_dates: set,
+    shared_allowed_days: set,
+    global_allowed_weekdays: List[int],
+    scheduled_games: List[GameRecord],
+    weekday_fill_mode: str,
+    weekday_priority_order: List[str],
+) -> List[dict]:
+    candidates = []
+
+    for current_date in daterange(start_date, end_date):
+        if current_date in blocked_dates:
+            continue
+        if current_date.weekday() not in global_allowed_weekdays:
+            continue
+        if current_date.weekday() not in shared_allowed_days:
+            continue
+
+        slot_defs = get_division_slot_defs(division, current_date)
+        for slot_order, slot_def in enumerate(slot_defs):
+            candidates.append(
+                {
+                    "date": current_date,
+                    "field": slot_def["field"],
+                    "start": slot_def["start"],
+                    "duration": slot_def["duration"],
+                    "bucket": slot_def["bucket"],
+                    "slot_order": slot_order,
+                }
+            )
+
+    priority_rank = {WEEKDAY_NAME_TO_INT[day]: i for i, day in enumerate(weekday_priority_order)}
+
+    def sort_key(item):
+        d = item["date"]
+        weekday = d.weekday()
+
+        if item["bucket"] != 1:
+            return (
+                item["bucket"],
+                division_games_in_week(scheduled_games, division, d),
+                division_games_on_date(scheduled_games, division, d),
+                d,
+                item["slot_order"],
+            )
+
+        if weekday_fill_mode == "Prioritize Specific Days":
+            return (
+                item["bucket"],
+                priority_rank.get(weekday, 999),
+                division_games_in_week(scheduled_games, division, d),
+                division_games_on_date(scheduled_games, division, d),
+                d,
+                item["slot_order"],
+            )
+
+        return (
+            item["bucket"],
+            division_games_on_weekday(scheduled_games, division, weekday),
+            division_games_in_week(scheduled_games, division, d),
+            division_games_on_date(scheduled_games, division, d),
+            d,
+            item["slot_order"],
+        )
+
+    return sorted(candidates, key=sort_key)
+
+
+def monthly_calendar_html(
+    schedule_df: pd.DataFrame,
+    year: int,
+    month: int,
+    division_filter: str = "All",
+    max_items_per_day: int = 4,
+) -> str:
     from calendar import monthrange
     import html
 
@@ -713,24 +914,22 @@ def monthly_calendar_html(schedule_df: pd.DataFrame, year: int, month: int, divi
             division_label = html.escape(str(division))
 
             card = f"""
-            <div style="
-                font-size:12px;
-                margin-top:6px;
-                padding:7px 8px;
-                border-radius:10px;
+            <div class="cal-event-card" style="
                 background:{palette['bg']};
                 border-left:5px solid {palette['border']};
                 color:{palette['text']};
-                line-height:1.35;
-                box-shadow:0 2px 8px rgba(0,0,0,0.06);
-                font-family:Arial,sans-serif;
             ">
-                <div style="font-weight:700;">{start} · {division_label}</div>
+                <div class="cal-event-title">{start} · {division_label}</div>
                 <div>{matchup}</div>
-                <div style="opacity:0.8;">{field}</div>
+                <div class="cal-event-field">{field}</div>
             </div>
             """
-            game_map.setdefault(d.day, []).append(card)
+            game_map.setdefault(d.day, []).append(
+                {
+                    "html": card,
+                    "summary": f"{start} · {division_label} · {matchup} · {field}",
+                }
+            )
 
     legend_html = ""
     if division_filter == "All":
@@ -765,6 +964,7 @@ def monthly_calendar_html(schedule_df: pd.DataFrame, year: int, month: int, divi
         gap:10px;
         font-family:Arial,sans-serif;
     }}
+
     .cal-header {{
         font-weight:700;
         text-align:center;
@@ -773,24 +973,70 @@ def monthly_calendar_html(schedule_df: pd.DataFrame, year: int, month: int, divi
         color:{WHITE};
         border-radius:10px;
     }}
+
     .cal-day {{
-        min-height:160px;
+        height:295px;
         border:1px solid {BORDER};
         border-radius:12px;
-        padding:8px;
         background:{WHITE};
-        overflow:hidden;
         box-shadow:0 4px 12px rgba(0,0,0,0.04);
+        overflow:hidden;
+        display:flex;
+        flex-direction:column;
     }}
+
     .cal-muted {{
         background:#F8F8F8;
         color:#C0C0C0;
     }}
+
+    .cal-day-top {{
+        padding:8px 8px 4px 8px;
+        border-bottom:1px solid #EEE7D4;
+        background:{WHITE};
+        flex:0 0 auto;
+    }}
+
     .cal-day-number {{
         font-weight:800;
         font-size:14px;
-        margin-bottom:4px;
         color:{OFF_BLACK};
+    }}
+
+    .cal-day-events {{
+        padding:6px 8px 8px 8px;
+        overflow:hidden;
+        flex:1 1 auto;
+    }}
+
+    .cal-event-card {{
+        font-size:12px;
+        margin-top:6px;
+        padding:7px 8px;
+        border-radius:10px;
+        line-height:1.3;
+        box-shadow:0 2px 8px rgba(0,0,0,0.06);
+        word-wrap:break-word;
+    }}
+
+    .cal-event-title {{
+        font-weight:700;
+        margin-bottom:2px;
+    }}
+
+    .cal-event-field {{
+        opacity:0.8;
+    }}
+
+    .cal-more {{
+        margin-top:8px;
+        padding:7px 8px;
+        border-radius:10px;
+        background:#F4F1E7;
+        border:1px dashed #CCBE8D;
+        color:{OFF_BLACK};
+        font-size:12px;
+        font-weight:700;
     }}
     </style>
 
@@ -808,8 +1054,32 @@ def monthly_calendar_html(schedule_df: pd.DataFrame, year: int, month: int, divi
         if day_num < 1 or day_num > days_in_month:
             html_out += "<div class='cal-day cal-muted'></div>"
         else:
-            games_html = "".join(game_map.get(day_num, []))
-            html_out += f"<div class='cal-day'><div class='cal-day-number'>{day_num}</div>{games_html}</div>"
+            day_items = game_map.get(day_num, [])
+            visible_items = day_items[:max_items_per_day]
+            hidden_items = day_items[max_items_per_day:]
+
+            games_html = "".join([item["html"] for item in visible_items])
+
+            more_html = ""
+            if hidden_items:
+                tooltip = "&#10;".join(html.escape(item["summary"]) for item in hidden_items)
+                more_html = f"""
+                <div class="cal-more" title="{tooltip}">
+                    +{len(hidden_items)} more game(s)
+                </div>
+                """
+
+            html_out += f"""
+            <div class='cal-day'>
+                <div class='cal-day-top'>
+                    <div class='cal-day-number'>{day_num}</div>
+                </div>
+                <div class='cal-day-events'>
+                    {games_html}
+                    {more_html}
+                </div>
+            </div>
+            """
 
     html_out += "</div>"
     return html_out
@@ -829,88 +1099,17 @@ def get_all_blocked_dates(current_year: int, extra_text: str) -> set:
     return blocked_dates
 
 
-def division_games_on_date(scheduled_games: List[GameRecord], division: str, current_date: date) -> int:
-    return sum(1 for g in scheduled_games if g.division == division and g.game_date == current_date)
-
-
-def division_games_in_week(scheduled_games: List[GameRecord], division: str, current_date: date) -> int:
-    iso_year, iso_week, _ = current_date.isocalendar()
-    return sum(
-        1
-        for g in scheduled_games
-        if g.division == division and g.game_date.isocalendar()[:2] == (iso_year, iso_week)
-    )
-
-
-def choose_home_away(
-    division: str,
-    team_a: str,
-    team_b: str,
-    home_counts: Dict[Tuple[str, str], int],
-    away_counts: Dict[Tuple[str, str], int],
-) -> Tuple[str, str]:
-    a_home = home_counts.get((division, team_a), 0)
-    b_home = home_counts.get((division, team_b), 0)
-    a_away = away_counts.get((division, team_a), 0)
-    b_away = away_counts.get((division, team_b), 0)
-
-    if a_home < b_home:
-        return team_a, team_b
-    if b_home < a_home:
-        return team_b, team_a
-
-    if a_away > b_away:
-        return team_a, team_b
-    if b_away > a_away:
-        return team_b, team_a
-
-    return (team_a, team_b) if team_a <= team_b else (team_b, team_a)
-
-
-def get_candidate_dates_sorted(
-    start_date: date,
-    end_date: date,
-    blocked_dates: set,
-    shared_allowed_days: set,
-    global_allowed_weekdays: List[int],
-    division: str,
-    scheduled_games: List[GameRecord],
-) -> List[date]:
-    candidates = []
-    for current_date in daterange(start_date, end_date):
-        if current_date in blocked_dates:
-            continue
-        if current_date.weekday() not in global_allowed_weekdays:
-            continue
-        if current_date.weekday() not in shared_allowed_days:
-            continue
-        candidates.append(current_date)
-
-    def sort_key(d: date):
-        if is_saturday(d):
-            return (0, d)
-        return (
-            1,
-            division_games_on_date(scheduled_games, division, d),
-            division_games_in_week(scheduled_games, division, d),
-            d.weekday(),
-            d,
-        )
-
-    return sorted(candidates, key=sort_key)
-
-
 def try_generate_schedule(
     teams: List[TeamRecord],
     games_per_team_by_division: Dict[str, int],
     max_games_per_week_by_division: Dict[str, int],
     division_night_groups: Dict[str, str],
-    division_fields: Dict[str, List[str]],
     start_date: date,
     end_date: date,
     global_allowed_weekdays: List[int],
     blocked_dates: set,
-    use_overflow_saturday_slot: bool,
+    weekday_fill_mode: str,
+    weekday_priority_order: List[str],
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
     warnings: List[str] = []
     scheduled_games: List[GameRecord] = []
@@ -923,16 +1122,7 @@ def try_generate_schedule(
     divisions = sorted({t.division for t in teams})
     teams_by_division = {division: [t for t in teams if t.division == division] for division in divisions}
 
-    inventory = {}
-    for current_date in daterange(start_date, end_date):
-        if current_date in blocked_dates:
-            continue
-        if current_date.weekday() not in global_allowed_weekdays:
-            continue
-        for slot_label, _, _, _ in get_day_slot_defs(current_date, use_overflow_saturday_slot):
-            for field in ALL_FIELDS:
-                inventory[(current_date, slot_label, field)] = None
-
+    inventory = set()
     team_busy = set()
     team_week_counts = {}
     home_counts: Dict[Tuple[str, str], int] = {}
@@ -951,38 +1141,33 @@ def try_generate_schedule(
 
         for team_a, team_b in pairings:
             shared_allowed_days = allowed_weekdays_for_matchup(
-                team_lookup,
-                division,
-                team_a,
-                team_b,
-                division_night_groups,
+                team_lookup=team_lookup,
+                division=division,
+                team_a=team_a,
+                team_b=team_b,
+                division_night_groups=division_night_groups,
             ).intersection(set(global_allowed_weekdays))
 
-            allowed_fields = eligible_fields_for_matchup(division, division_fields)
             placed = False
 
-            if not allowed_fields:
-                unscheduled_rows.append(
-                    {
-                        "Division": division,
-                        "Home Team": team_a,
-                        "Away Team": team_b,
-                        "Reason": "No fields selected for this division.",
-                    }
-                )
-                continue
-
-            candidate_dates = get_candidate_dates_sorted(
+            candidate_slots = build_candidate_slots_for_matchup(
+                division=division,
                 start_date=start_date,
                 end_date=end_date,
                 blocked_dates=blocked_dates,
                 shared_allowed_days=shared_allowed_days,
                 global_allowed_weekdays=global_allowed_weekdays,
-                division=division,
                 scheduled_games=scheduled_games,
+                weekday_fill_mode=weekday_fill_mode,
+                weekday_priority_order=weekday_priority_order,
             )
 
-            for current_date in candidate_dates:
+            for candidate in candidate_slots:
+                current_date = candidate["date"]
+                slot_label = candidate["start"]
+                field = candidate["field"]
+                duration_minutes = candidate["duration"]
+
                 iso_year, iso_week, _ = current_date.isocalendar()
                 a_week_key = (division, team_a, iso_year, iso_week)
                 b_week_key = (division, team_b, iso_year, iso_week)
@@ -1001,58 +1186,51 @@ def try_generate_schedule(
                 if same_day_conflict:
                     continue
 
-                slot_defs = get_day_slot_defs(current_date, use_overflow_saturday_slot)
+                if (current_date, slot_label, field) in inventory:
+                    continue
 
-                for slot_label, start_t, end_t, duration_minutes in slot_defs:
-                    if (current_date, slot_label, f"{division}::{team_a}") in team_busy or (
-                        current_date, slot_label, f"{division}::{team_b}"
-                    ) in team_busy:
-                        continue
+                if (current_date, slot_label, f"{division}::{team_a}") in team_busy:
+                    continue
+                if (current_date, slot_label, f"{division}::{team_b}") in team_busy:
+                    continue
 
-                    for field in allowed_fields:
-                        key = (current_date, slot_label, field)
-                        if key not in inventory or inventory[key] is not None:
-                            continue
+                home_team, away_team = choose_home_away(
+                    division=division,
+                    team_a=team_a,
+                    team_b=team_b,
+                    home_counts=home_counts,
+                    away_counts=away_counts,
+                )
 
-                        home_team, away_team = choose_home_away(
-                            division=division,
-                            team_a=team_a,
-                            team_b=team_b,
-                            home_counts=home_counts,
-                            away_counts=away_counts,
-                        )
+                start_dt = datetime.strptime(slot_label, "%H:%M")
+                end_dt = start_dt + timedelta(minutes=duration_minutes)
 
-                        scheduled_games.append(
-                            GameRecord(
-                                division=division,
-                                home_team=home_team,
-                                away_team=away_team,
-                                game_date=current_date,
-                                start_time=start_t,
-                                end_time=end_t,
-                                field=field,
-                                slot_label=slot_label,
-                                duration_minutes=duration_minutes,
-                            )
-                        )
+                scheduled_games.append(
+                    GameRecord(
+                        division=division,
+                        home_team=home_team,
+                        away_team=away_team,
+                        game_date=current_date,
+                        start_time=start_dt.time(),
+                        end_time=end_dt.time(),
+                        field=field,
+                        slot_label=slot_label,
+                        duration_minutes=duration_minutes,
+                    )
+                )
 
-                        inventory[key] = f"{away_team} @ {home_team}"
-                        team_busy.add((current_date, slot_label, f"{division}::{team_a}"))
-                        team_busy.add((current_date, slot_label, f"{division}::{team_b}"))
-                        team_week_counts[a_week_key] = team_week_counts.get(a_week_key, 0) + 1
-                        team_week_counts[b_week_key] = team_week_counts.get(b_week_key, 0) + 1
-                        home_counts[(division, home_team)] = home_counts.get((division, home_team), 0) + 1
-                        away_counts[(division, away_team)] = away_counts.get((division, away_team), 0) + 1
+                inventory.add((current_date, slot_label, field))
+                team_busy.add((current_date, slot_label, f"{division}::{team_a}"))
+                team_busy.add((current_date, slot_label, f"{division}::{team_b}"))
+                team_week_counts[a_week_key] = team_week_counts.get(a_week_key, 0) + 1
+                team_week_counts[b_week_key] = team_week_counts.get(b_week_key, 0) + 1
+                home_counts[(division, home_team)] = home_counts.get((division, home_team), 0) + 1
+                away_counts[(division, away_team)] = away_counts.get((division, away_team), 0) + 1
 
-                        placed = True
-                        break
+                placed = True
+                break
 
-                    if placed:
-                        break
-                if placed:
-                    break
-
-            if not placed and division in division_fields and division_fields[division]:
+            if not placed:
                 unscheduled_rows.append(
                     {
                         "Division": division,
@@ -1068,6 +1246,11 @@ def try_generate_schedule(
         schedule_df = schedule_df.sort_values(["Date", "Start", "Field", "Division"]).reset_index(drop=True)
 
     unscheduled_df = pd.DataFrame(unscheduled_rows)
+    if not unscheduled_df.empty:
+        warnings.append(
+            f"{len(unscheduled_df)} game(s) could not be scheduled automatically and were saved to the unscheduled list."
+        )
+
     return schedule_df, unscheduled_df, warnings
 
 
@@ -1076,55 +1259,25 @@ def generate_schedule(
     games_per_team_by_division: Dict[str, int],
     max_games_per_week_by_division: Dict[str, int],
     division_night_groups: Dict[str, str],
-    division_fields: Dict[str, List[str]],
     start_date: date,
     end_date: date,
     global_allowed_weekdays: List[int],
     blocked_dates: set,
+    weekday_fill_mode: str,
+    weekday_priority_order: List[str],
 ) -> Tuple[pd.DataFrame, pd.DataFrame, List[str]]:
-    warnings: List[str] = []
-
-    schedule_df, unscheduled_df, _ = try_generate_schedule(
+    return try_generate_schedule(
         teams=teams,
         games_per_team_by_division=games_per_team_by_division,
         max_games_per_week_by_division=max_games_per_week_by_division,
         division_night_groups=division_night_groups,
-        division_fields=division_fields,
         start_date=start_date,
         end_date=end_date,
         global_allowed_weekdays=global_allowed_weekdays,
         blocked_dates=blocked_dates,
-        use_overflow_saturday_slot=False,
+        weekday_fill_mode=weekday_fill_mode,
+        weekday_priority_order=weekday_priority_order,
     )
-
-    if unscheduled_df.empty:
-        return schedule_df, unscheduled_df, warnings
-
-    overflow_schedule_df, overflow_unscheduled_df, _ = try_generate_schedule(
-        teams=teams,
-        games_per_team_by_division=games_per_team_by_division,
-        max_games_per_week_by_division=max_games_per_week_by_division,
-        division_night_groups=division_night_groups,
-        division_fields=division_fields,
-        start_date=start_date,
-        end_date=end_date,
-        global_allowed_weekdays=global_allowed_weekdays,
-        blocked_dates=blocked_dates,
-        use_overflow_saturday_slot=True,
-    )
-
-    if len(overflow_unscheduled_df) < len(unscheduled_df):
-        warnings.append("Saturday 5:30 PM overflow slots were used because the base Saturday-first schedule could not fit all games.")
-        if not overflow_unscheduled_df.empty:
-            warnings.append(
-                f"{len(overflow_unscheduled_df)} game(s) still could not be scheduled automatically and were saved to the unscheduled list."
-            )
-        return overflow_schedule_df, overflow_unscheduled_df, warnings
-
-    warnings.append(
-        f"{len(unscheduled_df)} game(s) could not be scheduled automatically and were saved to the unscheduled list."
-    )
-    return schedule_df, unscheduled_df, warnings
 
 
 def get_open_slots(
@@ -1134,8 +1287,6 @@ def get_open_slots(
     blocked_dates: set,
     global_allowed_weekdays: List[int],
     division_night_groups: Dict[str, str],
-    division_fields: Dict[str, List[str]],
-    include_saturday_overflow: bool = True,
 ) -> List[Tuple[str, str]]:
     if selected_date in blocked_dates:
         return []
@@ -1152,29 +1303,29 @@ def get_open_slots(
     if not schedule_copy.empty:
         schedule_copy["Date"] = pd.to_datetime(schedule_copy["Date"])
 
-    slot_defs = get_day_slot_defs(selected_date, include_saturday_overflow)
-    allowed_fields = division_fields.get(selected_division, [])
+    slot_defs = get_division_slot_defs(selected_division, selected_date)
 
-    for slot_label, _, _, _ in slot_defs:
-        for field in allowed_fields:
-            occupied = False
-            if not schedule_copy.empty:
-                occupied = (
-                    (schedule_copy["Date"].dt.date == selected_date)
-                    & (schedule_copy["Slot"] == slot_label)
-                    & (schedule_copy["Field"] == field)
-                ).any()
-            if not occupied:
-                open_slots.append((slot_label, field))
+    for slot_def in slot_defs:
+        slot_label = slot_def["start"]
+        field = slot_def["field"]
+        occupied = False
+        if not schedule_copy.empty:
+            occupied = (
+                (schedule_copy["Date"].dt.date == selected_date)
+                & (schedule_copy["Slot"] == slot_label)
+                & (schedule_copy["Field"] == field)
+            ).any()
+        if not occupied:
+            open_slots.append((slot_label, field))
     return open_slots
 
 
-def get_slot_duration_for_date_and_time(selected_date: date, slot_label: str) -> int:
-    if is_weekday(selected_date):
-        return WEEKDAY_GAME_LENGTH_MINUTES
-    if is_saturday(selected_date):
-        return SATURDAY_GAME_LENGTH_MINUTES
-    return WEEKDAY_GAME_LENGTH_MINUTES
+def get_slot_duration_for_division_date_and_time(division: str, selected_date: date, slot_label: str, field: str) -> int:
+    slot_defs = get_division_slot_defs(division, selected_date)
+    for slot_def in slot_defs:
+        if slot_def["start"] == slot_label and slot_def["field"] == field:
+            return slot_def["duration"]
+    return 90
 
 
 def can_place_manual_game(
@@ -1188,7 +1339,6 @@ def can_place_manual_game(
     global_allowed_weekdays: List[int],
     max_games_per_week_by_division: Dict[str, int],
     division_night_groups: Dict[str, str],
-    division_fields: Dict[str, List[str]],
 ) -> Tuple[bool, str]:
     if selected_date in blocked_dates:
         return False, "That date is blocked out."
@@ -1200,8 +1350,9 @@ def can_place_manual_game(
     home_team = game_row["Home Team"]
     away_team = game_row["Away Team"]
 
-    if field not in division_fields.get(division, []):
-        return False, "Selected field is not allowed for this division."
+    valid_slots = get_division_slot_defs(division, selected_date)
+    if not any(s["start"] == slot_label and s["field"] == field for s in valid_slots):
+        return False, "That slot is not valid for this division."
 
     if is_weekday(selected_date):
         division_weekdays = get_division_weekday_set(division, division_night_groups)
@@ -1279,12 +1430,13 @@ def add_manual_game_to_schedule(
     field: str,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     row = unscheduled_df.loc[unscheduled_index]
-    duration_minutes = get_slot_duration_for_date_and_time(selected_date, slot_label)
+    division = row["Division"]
+    duration_minutes = get_slot_duration_for_division_date_and_time(division, selected_date, slot_label, field)
     start_dt = datetime.strptime(slot_label, "%H:%M")
     end_dt = start_dt + timedelta(minutes=duration_minutes)
 
     new_row = {
-        "Division": row["Division"],
+        "Division": division,
         "Home Team": row["Home Team"],
         "Away Team": row["Away Team"],
         "Date": pd.to_datetime(selected_date),
@@ -1304,6 +1456,26 @@ def add_manual_game_to_schedule(
     return updated_schedule, updated_unscheduled
 
 
+def render_division_slot_profile():
+    st.markdown("### Division Slot Profiles")
+    profile_rows = []
+    for division in DIVISION_SHEETS:
+        weekday_slots = DIVISION_SLOT_RULES.get(division, {}).get("weekday", [])
+        saturday_slots = DIVISION_SLOT_RULES.get(division, {}).get("saturday", [])
+
+        weekday_text = ", ".join([f"{x['field']} @ {x['start']}" for x in weekday_slots]) or "-"
+        saturday_text = ", ".join([f"{x['field']} @ {x['start']}" for x in saturday_slots]) or "-"
+
+        profile_rows.append(
+            {
+                "Division": division,
+                "Weekday Slots": weekday_text,
+                "Saturday Slots": saturday_text,
+            }
+        )
+    st.dataframe(pd.DataFrame(profile_rows), use_container_width=True, hide_index=True)
+
+
 # -------------------------
 # UI
 # -------------------------
@@ -1311,11 +1483,11 @@ render_hero()
 
 top_a, top_b, top_c = st.columns([1.8, 1.2, 1.2])
 with top_a:
-    mini_metric("Scheduling Mode", "Saturday First")
+    mini_metric("Scheduling Mode", "Early Sat → Week → Late Sat")
 with top_b:
-    mini_metric("Weekday Format", "Mon–Thu / 5:00 & 6:30")
+    mini_metric("Weekday Weighting", "Even / Priority")
 with top_c:
-    mini_metric("Weekend Format", "Saturday / 9:30, 11:30, 1:30")
+    mini_metric("Calendar View", "Compact + More")
 
 
 section_open(
@@ -1379,12 +1551,6 @@ if uploaded_file is not None:
                 division: st.session_state.division_night_groups.get(division, "None")
                 for division in master_team_df["Division"].unique().tolist()
             }
-            st.session_state.division_fields = {
-                division: st.session_state.division_fields.get(
-                    division, DEFAULT_FIELDS_BY_DIVISION.get(division, [])
-                )
-                for division in master_team_df["Division"].unique().tolist()
-            }
 
             st.success("Workbook loaded successfully.")
             with st.expander("Workbook preview", expanded=False):
@@ -1407,7 +1573,7 @@ unscheduled_df = st.session_state.unscheduled_df.copy()
 if not master_team_df.empty:
     section_open(
         "League Scheduling Rules",
-        "Set season dates, allowed days, blackout dates, division night groups, fields, and weekly limits.",
+        "Set season dates, allowed days, blackout dates, division night groups, weekday weighting, and weekly limits.",
     )
 
     current_year = date.today().year
@@ -1420,14 +1586,12 @@ if not master_team_df.empty:
         st.session_state.season_end = season_end
 
         st.markdown(
-            f"""
+            """
             <div class="scheduler-note">
-                <strong>Weekday games</strong><br>
-                Monday–Thursday only<br>
-                5:00 PM and 6:30 PM<br><br>
-                <strong>Saturday games</strong><br>
-                9:30 AM, 11:30 AM, 1:30 PM<br>
-                5:30 PM overflow only if needed
+                <strong>Scheduling flow</strong><br>
+                Fill the first two Saturday slots first, then use weekday inventory,
+                then use later Saturday slots if still needed.<br><br>
+                Each division follows its own field/time profile.
             </div>
             """,
             unsafe_allow_html=True,
@@ -1440,6 +1604,14 @@ if not master_team_df.empty:
             default=["Monday", "Tuesday", "Wednesday", "Thursday", "Saturday"],
             help="No Friday games in this version.",
         )
+
+        weekday_fill_mode = st.selectbox(
+            "Weekday fill mode",
+            options=WEEKDAY_FILL_MODE_OPTIONS,
+            index=WEEKDAY_FILL_MODE_OPTIONS.index(st.session_state.weekday_fill_mode),
+            help="Even Spread balances weekday usage. Prioritize Specific Days tries to fill your chosen days first.",
+        )
+        st.session_state.weekday_fill_mode = weekday_fill_mode
 
     with rules_col3:
         st.markdown("**Blackout dates**")
@@ -1455,6 +1627,31 @@ if not master_team_df.empty:
             value="",
             help="Examples: 04-20, 05-25, May 30",
         )
+
+    if weekday_fill_mode == "Prioritize Specific Days":
+        st.markdown("### Weekday Priority Order")
+        pr1, pr2, pr3, pr4 = st.columns(4)
+
+        current_priority = st.session_state.weekday_priority_order
+        if len(current_priority) != 4:
+            current_priority = ["Monday", "Tuesday", "Wednesday", "Thursday"]
+
+        with pr1:
+            first_day = st.selectbox("1st priority", WEEKDAY_OPTIONS, index=WEEKDAY_OPTIONS.index(current_priority[0]))
+        with pr2:
+            second_day = st.selectbox("2nd priority", WEEKDAY_OPTIONS, index=WEEKDAY_OPTIONS.index(current_priority[1]))
+        with pr3:
+            third_day = st.selectbox("3rd priority", WEEKDAY_OPTIONS, index=WEEKDAY_OPTIONS.index(current_priority[2]))
+        with pr4:
+            fourth_day = st.selectbox("4th priority", WEEKDAY_OPTIONS, index=WEEKDAY_OPTIONS.index(current_priority[3]))
+
+        weekday_priority_order = [first_day, second_day, third_day, fourth_day]
+        valid_priority, priority_message = validate_priority_order(weekday_priority_order)
+        if not valid_priority:
+            st.error(priority_message)
+        st.session_state.weekday_priority_order = weekday_priority_order
+    else:
+        weekday_priority_order = st.session_state.weekday_priority_order
 
     if st.session_state.blockout_dates:
         st.write("Current blackout dates")
@@ -1473,12 +1670,13 @@ if not master_team_df.empty:
                 ]
                 st.rerun()
 
+    render_division_slot_profile()
+
     st.markdown("### Division Setup")
     division_names = sorted(master_team_df["Division"].unique().tolist())
     games_per_team_by_division: Dict[str, int] = {}
     max_games_per_week_by_division: Dict[str, int] = {}
     division_night_groups: Dict[str, str] = {}
-    division_fields: Dict[str, List[str]] = {}
 
     setup_cols = st.columns(len(division_names)) if division_names else []
     for idx, division in enumerate(division_names):
@@ -1508,17 +1706,9 @@ if not master_team_df.empty:
                 key=f"night_group_{division}",
                 help="None = not assigned to a special weekday group. Saturday is still allowed.",
             )
-            division_fields[division] = st.multiselect(
-                f"{division} allowed fields",
-                options=ALL_FIELDS,
-                default=st.session_state.division_fields.get(division, DEFAULT_FIELDS_BY_DIVISION.get(division, [])),
-                key=f"division_fields_{division}",
-                help="These fields are available for this entire division.",
-            )
 
     st.session_state.max_games_per_week_by_division = max_games_per_week_by_division.copy()
     st.session_state.division_night_groups = division_night_groups.copy()
-    st.session_state.division_fields = division_fields.copy()
 
     st.markdown("### Division Team Configuration")
     division_tabs = st.tabs(division_names)
@@ -1532,7 +1722,7 @@ if not master_team_df.empty:
     for idx, division in enumerate(division_names):
         with division_tabs[idx]:
             st.markdown(f"**{division}**")
-            st.caption(f"Night group: {division_night_groups[division]} | Fields: {', '.join(division_fields[division]) if division_fields[division] else 'None selected'}")
+            st.caption(f"Night group: {division_night_groups[division]}")
             division_teams = master_team_df[master_team_df["Division"] == division].copy().reset_index(drop=True)
 
             for _, team_row in division_teams.iterrows():
@@ -1543,9 +1733,7 @@ if not master_team_df.empty:
 
                 existing = current_team_config_lookup.get(
                     config_key,
-                    {
-                        "PreferredWeekdays": serialize_list(WEEKDAY_OPTIONS),
-                    },
+                    {"PreferredWeekdays": serialize_list(WEEKDAY_OPTIONS)},
                 )
 
                 default_days = set(deserialize_list(existing.get("PreferredWeekdays", "")))
@@ -1564,7 +1752,10 @@ if not master_team_df.empty:
                             if checked:
                                 selected_days.append(weekday)
 
-                    st.caption("Saturday is always allowed automatically. Friday is not used. Fields are now controlled at the division level.")
+                    st.caption(
+                        "Saturday is always allowed automatically. Friday is not used. "
+                        "Field/times are controlled by the division slot profile."
+                    )
 
                     updated_rows.append(
                         {
@@ -1589,30 +1780,49 @@ if not master_team_df.empty:
     with action_col1:
         generate_clicked = st.button("Generate Schedule", type="primary", use_container_width=True)
     with action_col2:
-        st.markdown(
-            """
-            <div class="scheduler-note">
-                Scheduling priority: fill Saturdays first, then spread remaining games across weekdays by division.
-                Home/away is balanced automatically.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        if weekday_fill_mode == "Prioritize Specific Days":
+            priority_text = " → ".join(weekday_priority_order)
+            st.markdown(
+                f"""
+                <div class="scheduler-note">
+                    Priority order: early Saturday slots first, then weekdays using your priority order
+                    ({priority_text}), then later Saturday slots. Home/away is balanced automatically.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                """
+                <div class="scheduler-note">
+                    Priority order: early Saturday slots first, then weekdays spread evenly across the week,
+                    then later Saturday slots. Home/away is balanced automatically.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     section_close()
 
     if generate_clicked:
+        if weekday_fill_mode == "Prioritize Specific Days":
+            valid_priority, priority_message = validate_priority_order(weekday_priority_order)
+            if not valid_priority:
+                st.error(priority_message)
+                st.stop()
+
         team_records = parse_team_records_from_config(team_config_df)
         schedule_df, unscheduled_df, warnings = generate_schedule(
             teams=team_records,
             games_per_team_by_division=games_per_team_by_division,
             max_games_per_week_by_division=max_games_per_week_by_division,
             division_night_groups=division_night_groups,
-            division_fields=division_fields,
             start_date=season_start,
             end_date=season_end,
             global_allowed_weekdays=global_allowed_weekdays,
             blocked_dates=blocked_dates,
+            weekday_fill_mode=weekday_fill_mode,
+            weekday_priority_order=weekday_priority_order,
         )
         st.session_state.schedule_df = schedule_df.copy()
         st.session_state.unscheduled_df = unscheduled_df.copy()
@@ -1621,7 +1831,7 @@ if not master_team_df.empty:
             st.warning(warning)
 
         if schedule_df.empty:
-            st.error("No games were scheduled. Try expanding the date range, selecting fields, or loosening restrictions.")
+            st.error("No games were scheduled. Try expanding the date range or loosening restrictions.")
         else:
             st.success(f"Generated {len(schedule_df)} scheduled games.")
 
@@ -1643,7 +1853,6 @@ if not unscheduled_df.empty:
     global_allowed_weekdays = st.session_state.global_allowed_weekdays
     max_games_per_week_by_division = st.session_state.max_games_per_week_by_division
     division_night_groups = st.session_state.division_night_groups
-    division_fields = st.session_state.division_fields
 
     default_manual_date = st.session_state.season_start if st.session_state.season_start else date.today()
 
@@ -1672,8 +1881,6 @@ if not unscheduled_df.empty:
             blocked_dates=blocked_dates,
             global_allowed_weekdays=global_allowed_weekdays,
             division_night_groups=division_night_groups,
-            division_fields=division_fields,
-            include_saturday_overflow=True,
         )
         open_slot_labels = [f"{slot} | {field}" for slot, field in open_slots]
         selected_open_slot = st.selectbox(
@@ -1697,7 +1904,6 @@ if not unscheduled_df.empty:
             global_allowed_weekdays=global_allowed_weekdays,
             max_games_per_week_by_division=max_games_per_week_by_division,
             division_night_groups=division_night_groups,
-            division_fields=division_fields,
         )
 
         if is_valid:
@@ -1736,7 +1942,7 @@ if not unscheduled_df.empty:
 if not schedule_df.empty:
     section_open(
         "Schedule Views",
-        "Filter the schedule by division, team, and field, then view it as a calendar or as a game list.",
+        "Filter the schedule by division, team, and field, then view it as a compact calendar or as a game list.",
     )
 
     schedule_df["Date"] = pd.to_datetime(schedule_df["Date"])
@@ -1811,8 +2017,15 @@ if not schedule_df.empty:
                 format_func=lambda m: datetime(2000, m, 1).strftime("%B"),
                 index=max(0, min(11, int(filtered_df["Month"].min()) - 1)),
             )
-        calendar_html = monthly_calendar_html(filtered_df, year_choice, month_choice, division_filter=division_filter)
-        st.components.v1.html(calendar_html, height=1000, scrolling=True)
+
+        calendar_html = monthly_calendar_html(
+            filtered_df,
+            year_choice,
+            month_choice,
+            division_filter=division_filter,
+            max_items_per_day=4,
+        )
+        st.components.v1.html(calendar_html, height=780, scrolling=True)
 
     st.markdown("### Home/Away Summary")
     summary_df = pd.concat(
@@ -1851,23 +2064,22 @@ with st.expander("What this version supports / next upgrades", expanded=False):
         **Included now**
         - One workbook tab per division
         - Team name, team color, coach name ingestion
-        - Division-level field selection
+        - Division-specific field/time scheduling profiles
         - Checkbox-based weekday selection
         - No Friday games
-        - Weekday schedule: 5:00 and 6:30, 1.5 hours
-        - Saturday schedule: 9:30, 11:30, 1:30, 2 hours
-        - Saturday 5:30 overflow only if needed
-        - Saturday-first scheduling priority
-        - Remaining weekday games spread more evenly by division
-        - Division night groups: None, M/W, T/Th
+        - Night groups: None, M/W, T/Th
+        - Early Saturday slot priority
+        - Weekday fill before late Saturday fill
+        - Weekday fill modes:
+          - Even Spread
+          - Prioritize Specific Days
         - Home/away balancing
         - League blackout dates with quick add/remove
         - Games per team by division
         - Max games per week by division
         - Unscheduled games list
-        - Manual placement of unscheduled games into open slots
-        - Filterable list and calendar views
-        - Division-colored calendar
+        - Manual placement of unscheduled games into valid division slots
+        - Compact calendar view with +more indicator for busy days
         - Home/away summary table
 
         **Still good next upgrades**
