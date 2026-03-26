@@ -55,6 +55,8 @@ PAPER = "#FAF8F2"
 WHITE = "#FFFFFF"
 MUTED = "#6B7280"
 
+SPORTSCONNECT_LOCATION = "Kinsella Park"
+
 # -----------------------------------------------------
 # Division scheduling profiles
 # bucket:
@@ -679,10 +681,6 @@ def allowed_weekdays_for_matchup(
 
 
 def generate_round_robin_pairings(team_names: List[str], games_per_team: int) -> List[Tuple[str, str]]:
-    """
-    Generate pairings while trying hard to avoid rematches until each team has
-    rotated through the rest of its division.
-    """
     teams = sorted(list(team_names))
     if len(teams) < 2 or games_per_team <= 0:
         return []
@@ -897,11 +895,6 @@ def would_violate_progress_balance(
     team_a: str,
     team_b: str,
 ) -> bool:
-    """
-    Prevent one team from getting too far ahead of the rest of the division.
-    Rule: after placing a game, no team should be more than 1 game ahead of the
-    current minimum games played within the division.
-    """
     counts = get_division_team_game_counts(scheduled_games, division, division_team_names)
     counts[team_a] += 1
     counts[team_b] += 1
@@ -1226,6 +1219,57 @@ def monthly_calendar_html(
 
 def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8")
+
+
+def field_to_sportsconnect_field(field_value: str) -> str:
+    value = str(field_value).strip()
+    if value.lower().startswith("field "):
+        suffix = value.split(" ", 1)[1].strip()
+        return f"Painted Post - F{suffix}"
+    return f"Painted Post - {value}"
+
+
+def format_match_date_for_sportsconnect(dt_value) -> str:
+    dt_value = pd.to_datetime(dt_value)
+    return f"{dt_value.day}-{dt_value.strftime('%b')}"
+
+
+def build_sportsconnect_export_df(schedule_input_df: pd.DataFrame) -> pd.DataFrame:
+    if schedule_input_df.empty:
+        return pd.DataFrame(
+            columns=[
+                "SortOrder",
+                "RoundNo",
+                "HomeTeam",
+                "AwayTeam",
+                "MatchDate",
+                "StartTime",
+                "EndTime",
+                "Location",
+                "Field",
+                "DayOfWeek",
+            ]
+        )
+
+    df = schedule_input_df.copy()
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.sort_values(["Date", "Start", "Field", "Division", "Home Team", "Away Team"]).reset_index(drop=True)
+
+    export_df = pd.DataFrame(
+        {
+            "SortOrder": range(1, len(df) + 1),
+            "RoundNo": 1,
+            "HomeTeam": df["Home Team"],
+            "AwayTeam": df["Away Team"],
+            "MatchDate": df["Date"].apply(format_match_date_for_sportsconnect),
+            "StartTime": df["Start"],
+            "EndTime": df["End"],
+            "Location": SPORTSCONNECT_LOCATION,
+            "Field": df["Field"].apply(field_to_sportsconnect_field),
+            "DayOfWeek": df["Date"].dt.strftime("%A"),
+        }
+    )
+    return export_df
 
 
 def get_all_blocked_dates(current_year: int, extra_text: str) -> set:
@@ -2114,6 +2158,7 @@ if not schedule_df.empty:
     schedule_df["Date"] = pd.to_datetime(schedule_df["Date"])
     schedule_df["Year"] = schedule_df["Date"].dt.year
     schedule_df["Month"] = schedule_df["Date"].dt.month
+    schedule_df["DayOfWeek"] = schedule_df["Date"].dt.strftime("%A")
 
     filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(4)
     with filter_col1:
@@ -2138,7 +2183,9 @@ if not schedule_df.empty:
 
     filtered_df = filtered_df.sort_values(["Date", "Start", "Field", "Division"]).reset_index(drop=True)
 
-    export_col1, export_col2, export_col3 = st.columns(3)
+    sportsconnect_df = build_sportsconnect_export_df(filtered_df)
+
+    export_col1, export_col2, export_col3, export_col4 = st.columns(4)
     with export_col1:
         st.download_button(
             "Download filtered schedule CSV",
@@ -2167,6 +2214,19 @@ if not schedule_df.empty:
             mime="text/csv",
             use_container_width=True,
         )
+    with export_col4:
+        sportsconnect_file_name = "sportsconnect_schedule_data.csv"
+        if team_filter != "All":
+            safe_team_name = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in team_filter)
+            sportsconnect_file_name = f"sportsconnect_schedule_data_{safe_team_name}.csv"
+
+        st.download_button(
+            "Save SportsConnect Schedule Data",
+            data=dataframe_to_csv_bytes(sportsconnect_df),
+            file_name=sportsconnect_file_name,
+            mime="text/csv",
+            use_container_width=True,
+        )
 
     if view_mode == "Games List":
         display_df = filtered_df.copy()
@@ -2192,6 +2252,9 @@ if not schedule_df.empty:
             max_items_per_day=4,
         )
         st.components.v1.html(calendar_html, height=780, scrolling=True)
+
+    st.markdown("### SportsConnect Export Preview")
+    st.dataframe(sportsconnect_df, use_container_width=True, hide_index=True)
 
     st.markdown("### Home/Away Summary")
     summary_df = pd.concat(
@@ -2292,6 +2355,9 @@ with st.expander("What this version supports / next upgrades", expanded=False):
         - Compact calendar view with +more indicator for busy days
         - Home/away summary table
         - Equity summary table
+        - SportsConnect CSV export using the active filters
+        - SportsConnect columns:
+          SortOrder, RoundNo, HomeTeam, AwayTeam, MatchDate, StartTime, EndTime, Location, Field, DayOfWeek
 
         **Still good next upgrades**
         - Conflict reporting explaining exactly why a game could not be placed
