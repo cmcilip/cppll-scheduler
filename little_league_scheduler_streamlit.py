@@ -679,48 +679,111 @@ def allowed_weekdays_for_matchup(
 
 
 def generate_round_robin_pairings(team_names: List[str], games_per_team: int) -> List[Tuple[str, str]]:
-    teams = list(team_names)
+    """
+    Generate pairings while trying hard to avoid rematches until each team has
+    rotated through the rest of its division.
+    """
+    teams = sorted(list(team_names))
     if len(teams) < 2 or games_per_team <= 0:
         return []
 
-    pairings = []
+    pairings: List[Tuple[str, str]] = []
     game_count = {team: 0 for team in teams}
-    matchup_counts = {}
-    safety_cap = max(2000, len(teams) * games_per_team * 10)
-    loops = 0
+    matchup_counts: Dict[Tuple[str, str], int] = {}
+    last_matchup_index: Dict[Tuple[str, str], int] = {}
 
-    while min(game_count.values()) < games_per_team and loops < safety_cap:
-        loops += 1
-        sorted_teams = sorted(teams, key=lambda x: (game_count[x], x))
+    max_unique_opponents = len(teams) - 1
+    opponents_seen_this_cycle: Dict[str, set] = {team: set() for team in teams}
+
+    safety_cap = max(5000, len(teams) * games_per_team * 30)
+    loop_count = 0
+
+    def teams_still_needing_games() -> List[str]:
+        return [t for t in teams if game_count[t] < games_per_team]
+
+    def maybe_reset_team_cycle(team: str):
+        if len(opponents_seen_this_cycle[team]) >= max_unique_opponents:
+            opponents_seen_this_cycle[team] = set()
+
+    while min(game_count.values()) < games_per_team and loop_count < safety_cap:
+        loop_count += 1
+        made_pair_this_pass = False
         used_this_pass = set()
-        made_pair = False
 
-        for i, team_a in enumerate(sorted_teams):
+        needers = sorted(teams_still_needing_games(), key=lambda t: (game_count[t], t))
+        if len(needers) < 2:
+            break
+
+        for team_a in needers:
             if team_a in used_this_pass or game_count[team_a] >= games_per_team:
                 continue
 
+            maybe_reset_team_cycle(team_a)
+
             candidates = []
-            for team_b in sorted_teams[i + 1:]:
-                if team_b in used_this_pass or team_b == team_a or game_count[team_b] >= games_per_team:
+            for team_b in needers:
+                if team_b == team_a:
                     continue
+                if team_b in used_this_pass:
+                    continue
+                if game_count[team_b] >= games_per_team:
+                    continue
+
+                maybe_reset_team_cycle(team_b)
+
                 matchup_key = tuple(sorted((team_a, team_b)))
-                candidates.append((matchup_counts.get(matchup_key, 0), game_count[team_b], team_b))
+                matchup_count = matchup_counts.get(matchup_key, 0)
+
+                a_has_seen_b = team_b in opponents_seen_this_cycle[team_a]
+                b_has_seen_a = team_a in opponents_seen_this_cycle[team_b]
+                repeat_in_current_cycle = a_has_seen_b or b_has_seen_a
+
+                if matchup_key in last_matchup_index:
+                    games_since_last_meeting = len(pairings) - last_matchup_index[matchup_key]
+                else:
+                    games_since_last_meeting = 10**9
+
+                candidates.append(
+                    (
+                        1 if repeat_in_current_cycle else 0,
+                        matchup_count,
+                        -games_since_last_meeting,
+                        game_count[team_b],
+                        team_b,
+                    )
+                )
 
             if not candidates:
                 continue
 
-            candidates.sort(key=lambda x: (x[0], x[1], x[2]))
-            _, _, team_b = candidates[0]
+            candidates.sort()
+            _, _, _, _, team_b = candidates[0]
+
             pairings.append((team_a, team_b))
             game_count[team_a] += 1
             game_count[team_b] += 1
+
             matchup_key = tuple(sorted((team_a, team_b)))
             matchup_counts[matchup_key] = matchup_counts.get(matchup_key, 0) + 1
+            last_matchup_index[matchup_key] = len(pairings) - 1
+
+            opponents_seen_this_cycle[team_a].add(team_b)
+            opponents_seen_this_cycle[team_b].add(team_a)
+
             used_this_pass.add(team_a)
             used_this_pass.add(team_b)
-            made_pair = True
+            made_pair_this_pass = True
 
-        if not made_pair:
+        if made_pair_this_pass:
+            continue
+
+        relaxed_any = False
+        for team in teams:
+            if game_count[team] < games_per_team and opponents_seen_this_cycle[team]:
+                opponents_seen_this_cycle[team] = set()
+                relaxed_any = True
+
+        if not relaxed_any:
             break
 
     return pairings
@@ -798,6 +861,100 @@ def choose_home_away(
     return (team_a, team_b) if team_a <= team_b else (team_b, team_a)
 
 
+def get_division_team_game_counts(
+    scheduled_games: List[GameRecord],
+    division: str,
+    team_names: List[str],
+) -> Dict[str, int]:
+    counts = {team: 0 for team in team_names}
+    for g in scheduled_games:
+        if g.division != division:
+            continue
+        counts[g.home_team] = counts.get(g.home_team, 0) + 1
+        counts[g.away_team] = counts.get(g.away_team, 0) + 1
+    return counts
+
+
+def get_division_team_saturday_counts(
+    scheduled_games: List[GameRecord],
+    division: str,
+    team_names: List[str],
+) -> Dict[str, int]:
+    counts = {team: 0 for team in team_names}
+    for g in scheduled_games:
+        if g.division != division:
+            continue
+        if g.game_date.weekday() == WEEKDAY_NAME_TO_INT["Saturday"]:
+            counts[g.home_team] = counts.get(g.home_team, 0) + 1
+            counts[g.away_team] = counts.get(g.away_team, 0) + 1
+    return counts
+
+
+def would_violate_progress_balance(
+    scheduled_games: List[GameRecord],
+    division: str,
+    division_team_names: List[str],
+    team_a: str,
+    team_b: str,
+) -> bool:
+    """
+    Prevent one team from getting too far ahead of the rest of the division.
+    Rule: after placing a game, no team should be more than 1 game ahead of the
+    current minimum games played within the division.
+    """
+    counts = get_division_team_game_counts(scheduled_games, division, division_team_names)
+    counts[team_a] += 1
+    counts[team_b] += 1
+
+    min_games = min(counts.values()) if counts else 0
+    max_games = max(counts.values()) if counts else 0
+    return (max_games - min_games) > 1
+
+
+def candidate_slot_sort_key(
+    item: dict,
+    division: str,
+    scheduled_games: List[GameRecord],
+    weekday_fill_mode: str,
+    weekday_priority_order: List[str],
+    saturday_priority_score: int = 0,
+):
+    d = item["date"]
+    weekday = d.weekday()
+    priority_rank = {WEEKDAY_NAME_TO_INT[day]: i for i, day in enumerate(weekday_priority_order)}
+
+    if item["bucket"] != 1:
+        return (
+            -saturday_priority_score,
+            item["bucket"],
+            division_games_in_week(scheduled_games, division, d),
+            division_games_on_date(scheduled_games, division, d),
+            d,
+            item["slot_order"],
+        )
+
+    if weekday_fill_mode == "Prioritize Specific Days":
+        return (
+            -saturday_priority_score,
+            item["bucket"],
+            priority_rank.get(weekday, 999),
+            division_games_in_week(scheduled_games, division, d),
+            division_games_on_date(scheduled_games, division, d),
+            d,
+            item["slot_order"],
+        )
+
+    return (
+        -saturday_priority_score,
+        item["bucket"],
+        division_games_on_weekday(scheduled_games, division, weekday),
+        division_games_in_week(scheduled_games, division, d),
+        division_games_on_date(scheduled_games, division, d),
+        d,
+        item["slot_order"],
+    )
+
+
 def build_candidate_slots_for_matchup(
     division: str,
     start_date: date,
@@ -808,6 +965,7 @@ def build_candidate_slots_for_matchup(
     scheduled_games: List[GameRecord],
     weekday_fill_mode: str,
     weekday_priority_order: List[str],
+    prefer_saturday: bool = False,
 ) -> List[dict]:
     candidates = []
 
@@ -821,6 +979,10 @@ def build_candidate_slots_for_matchup(
 
         slot_defs = get_division_slot_defs(division, current_date)
         for slot_order, slot_def in enumerate(slot_defs):
+            saturday_priority_score = 0
+            if prefer_saturday and is_saturday(current_date):
+                saturday_priority_score = 1
+
             candidates.append(
                 {
                     "date": current_date,
@@ -829,44 +991,21 @@ def build_candidate_slots_for_matchup(
                     "duration": slot_def["duration"],
                     "bucket": slot_def["bucket"],
                     "slot_order": slot_order,
+                    "saturday_priority_score": saturday_priority_score,
                 }
             )
 
-    priority_rank = {WEEKDAY_NAME_TO_INT[day]: i for i, day in enumerate(weekday_priority_order)}
-
-    def sort_key(item):
-        d = item["date"]
-        weekday = d.weekday()
-
-        if item["bucket"] != 1:
-            return (
-                item["bucket"],
-                division_games_in_week(scheduled_games, division, d),
-                division_games_on_date(scheduled_games, division, d),
-                d,
-                item["slot_order"],
-            )
-
-        if weekday_fill_mode == "Prioritize Specific Days":
-            return (
-                item["bucket"],
-                priority_rank.get(weekday, 999),
-                division_games_in_week(scheduled_games, division, d),
-                division_games_on_date(scheduled_games, division, d),
-                d,
-                item["slot_order"],
-            )
-
-        return (
-            item["bucket"],
-            division_games_on_weekday(scheduled_games, division, weekday),
-            division_games_in_week(scheduled_games, division, d),
-            division_games_on_date(scheduled_games, division, d),
-            d,
-            item["slot_order"],
-        )
-
-    return sorted(candidates, key=sort_key)
+    return sorted(
+        candidates,
+        key=lambda item: candidate_slot_sort_key(
+            item=item,
+            division=division,
+            scheduled_games=scheduled_games,
+            weekday_fill_mode=weekday_fill_mode,
+            weekday_priority_order=weekday_priority_order,
+            saturday_priority_score=item.get("saturday_priority_score", 0),
+        ),
+    )
 
 
 def monthly_calendar_html(
@@ -1128,6 +1267,8 @@ def try_generate_schedule(
     home_counts: Dict[Tuple[str, str], int] = {}
     away_counts: Dict[Tuple[str, str], int] = {}
 
+    division_saturday_unmet_possible = {}
+
     for division in divisions:
         division_teams = teams_by_division[division]
         team_names = [t.team for t in division_teams]
@@ -1148,6 +1289,11 @@ def try_generate_schedule(
                 division_night_groups=division_night_groups,
             ).intersection(set(global_allowed_weekdays))
 
+            saturday_counts = get_division_team_saturday_counts(scheduled_games, division, team_names)
+            team_a_needs_saturday = saturday_counts.get(team_a, 0) == 0
+            team_b_needs_saturday = saturday_counts.get(team_b, 0) == 0
+            prefer_saturday = team_a_needs_saturday or team_b_needs_saturday
+
             placed = False
 
             candidate_slots = build_candidate_slots_for_matchup(
@@ -1160,6 +1306,7 @@ def try_generate_schedule(
                 scheduled_games=scheduled_games,
                 weekday_fill_mode=weekday_fill_mode,
                 weekday_priority_order=weekday_priority_order,
+                prefer_saturday=prefer_saturday,
             )
 
             for candidate in candidate_slots:
@@ -1192,6 +1339,15 @@ def try_generate_schedule(
                 if (current_date, slot_label, f"{division}::{team_a}") in team_busy:
                     continue
                 if (current_date, slot_label, f"{division}::{team_b}") in team_busy:
+                    continue
+
+                if would_violate_progress_balance(
+                    scheduled_games=scheduled_games,
+                    division=division,
+                    division_team_names=team_names,
+                    team_a=team_a,
+                    team_b=team_b,
+                ):
                     continue
 
                 home_team, away_team = choose_home_away(
@@ -1236,9 +1392,14 @@ def try_generate_schedule(
                         "Division": division,
                         "Home Team": team_a,
                         "Away Team": team_b,
-                        "Reason": "No open slot matched date, field, weekday, night-group, or weekly-limit rules.",
+                        "Reason": "No open slot matched date, field, weekday, night-group, weekly-limit, Saturday equity, or fairness rules.",
                     }
                 )
+
+        saturday_counts = get_division_team_saturday_counts(scheduled_games, division, team_names)
+        missing_saturday = [team for team in team_names if saturday_counts.get(team, 0) == 0]
+        if missing_saturday:
+            division_saturday_unmet_possible[division] = missing_saturday
 
     schedule_df = pd.DataFrame([game.to_dict() for game in scheduled_games])
     if not schedule_df.empty:
@@ -1249,6 +1410,11 @@ def try_generate_schedule(
     if not unscheduled_df.empty:
         warnings.append(
             f"{len(unscheduled_df)} game(s) could not be scheduled automatically and were saved to the unscheduled list."
+        )
+
+    for division, missing_teams in division_saturday_unmet_possible.items():
+        warnings.append(
+            f"{division}: these teams did not receive a Saturday game automatically: {', '.join(missing_teams)}."
         )
 
     return schedule_df, unscheduled_df, warnings
@@ -2043,6 +2209,47 @@ if not schedule_df.empty:
     summary_df["Diff"] = summary_df["HomeGames"] - summary_df["AwayGames"]
     st.dataframe(summary_df, use_container_width=True, hide_index=True)
 
+    st.markdown("### Schedule Equity Summary")
+    equity_rows = []
+    division_team_map = (
+        st.session_state.master_team_df.groupby("Division")["Team"].apply(list).to_dict()
+        if not st.session_state.master_team_df.empty
+        else {}
+    )
+
+    for division, team_names in division_team_map.items():
+        div_games = [
+            GameRecord(
+                division=row["Division"],
+                home_team=row["Home Team"],
+                away_team=row["Away Team"],
+                game_date=row["Date"].date(),
+                start_time=datetime.strptime(row["Start"], "%H:%M").time(),
+                end_time=datetime.strptime(row["End"], "%H:%M").time(),
+                field=row["Field"],
+                slot_label=row["Slot"],
+                duration_minutes=int(row["DurationMinutes"]),
+            )
+            for _, row in schedule_df[schedule_df["Division"] == division].iterrows()
+        ]
+
+        total_counts = get_division_team_game_counts(div_games, division, team_names)
+        saturday_counts = get_division_team_saturday_counts(div_games, division, team_names)
+
+        for team in team_names:
+            equity_rows.append(
+                {
+                    "Division": division,
+                    "Team": team,
+                    "TotalGames": total_counts.get(team, 0),
+                    "SaturdayGames": saturday_counts.get(team, 0),
+                    "HasSaturday": "Yes" if saturday_counts.get(team, 0) > 0 else "No",
+                }
+            )
+
+    if equity_rows:
+        st.dataframe(pd.DataFrame(equity_rows), use_container_width=True, hide_index=True)
+
     section_close()
 
 
@@ -2074,6 +2281,9 @@ with st.expander("What this version supports / next upgrades", expanded=False):
           - Even Spread
           - Prioritize Specific Days
         - Home/away balancing
+        - Opponent rotation before rematches when possible
+        - Best-effort Saturday equity
+        - Progress fairness so teams do not get too far ahead in total games
         - League blackout dates with quick add/remove
         - Games per team by division
         - Max games per week by division
@@ -2081,10 +2291,14 @@ with st.expander("What this version supports / next upgrades", expanded=False):
         - Manual placement of unscheduled games into valid division slots
         - Compact calendar view with +more indicator for busy days
         - Home/away summary table
+        - Equity summary table
 
         **Still good next upgrades**
         - Conflict reporting explaining exactly why a game could not be placed
-        - Opponent-spacing rules
+        - Exact minimum-rematch-gap setting in UI (ex: must wait 3 scheduled games)
+        - Hard guarantee mode for at least one Saturday per team
+        - Manual placement fairness validator
+        - Opponent-spacing rules tied to actual calendar dates, not just matchup order
         - Saved schedules / persistence
         - True drag/drop calendar with a custom frontend component
         """
